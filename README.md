@@ -3,7 +3,7 @@
 <!-- badges: start -->
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 ![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)
-![Last commit](https://img.shields.io/github/last-commit/RayonVina/phytaxr?style=flat-square&color=b4befe)
+![Last commit](https://img.shields.io/github/last-commit/RayonVina/phytomap-web-viewer?style=flat-square&color=b4befe)
 <!-- badges: end -->
 
 Shiny web application for exploring the Phyto-MAP database of marine phytoplankton abundance records. 
@@ -30,8 +30,6 @@ The database is not included in this repository. Download it from Zenodo:
 
 - Record: https://zenodo.org/records/23885976
 - DOI: https://doi.org/10.5281/zenodo.23885976
-
-Place the SQLite file at `data/phytomap.sqlite3`. The application opens it in read-only mode.
 
 Create the `data/` directory if it does not exist, then place the downloaded SQLite file at `data/phytomap.sqlite3`.
 
