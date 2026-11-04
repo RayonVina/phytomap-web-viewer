@@ -1,0 +1,37 @@
+# R session files
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# Local database (download from Zenodo)
+/data/
+*.sqlite
+*.sqlite3
+*.db
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Local environment and credentials
+.Renviron
+.env
+.env.*
+!.env.example
+
+# Local deployment metadata
+/rsconnect/
+
+# Operating-system and editor files
+.DS_Store
+Thumbs.db
+*~
+.#*
+# Local IDE metadata
+/.posit/
