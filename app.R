@@ -20,6 +20,7 @@ if (length(missing_packages) > 0L) {
 
 source(file.path("R", "connection.R"), local = TRUE)
 source(file.path("R", "queries.R"), local = TRUE)
+source(file.path("R", "table_display.R"), local = TRUE)
 
 source(file.path("R", "server_home.R"), local = TRUE)
 source(file.path("R", "server_catalog.R"), local = TRUE)

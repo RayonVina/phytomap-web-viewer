@@ -878,19 +878,7 @@ register_catalog_server <- function(input, output, session, con) {
         )
       )
 
-      data[] <- lapply(data, function(value) {
-        text <- if (is.numeric(value)) {
-          sprintf("%.17g", value)
-        } else {
-          as.character(value)
-        }
-
-        text[is.na(value)] <- "[SQL NULL]"
-        text[!is.na(value) & text == ""] <- "[Empty string]"
-        text
-      })
-
-      DT::datatable(
+      table <- DT::datatable(
         data,
         container = container,
         rownames = FALSE,
@@ -900,10 +888,20 @@ register_catalog_server <- function(input, output, session, con) {
           dom = "t",
           paging = FALSE,
           searching = FALSE,
-          ordering = FALSE,
-          scrollX = TRUE
+          ordering = TRUE,
+          order = list(),
+          orderCellsTop = TRUE,
+          scrollX = TRUE,
+          columnDefs = list(
+            list(
+              targets = "_all",
+              defaultContent = ""
+            )
+          )
         )
       )
+
+      format_result_table(table, data)
     },
     server = FALSE
   )

@@ -1459,21 +1459,17 @@ register_map_server <- function(input, output, session, con) {
   output$sr_table <- DT::renderDT(
     {
       if (is.null(sr_loaded())) {
-        return(DT::datatable(data.frame(), options = list(dom = "t")))
+        return(
+          DT::datatable(
+            data.frame(),
+            options = list(dom = "t")
+          )
+        )
       }
+
       data <- sr_page_result()$data[, sr_visible(), drop = FALSE]
-      for (name in names(data)) {
-        value <- data[[name]]
-        text <- if (is.numeric(value)) {
-          sprintf("%.17g", value)
-        } else {
-          as.character(value)
-        }
-        text[is.na(value)] <- "[SQL NULL]"
-        text[!is.na(value) & text == ""] <- "[Empty string]"
-        data[[name]] <- text
-      }
-      DT::datatable(
+
+      table <- DT::datatable(
         data,
         rownames = FALSE,
         escape = TRUE,
@@ -1481,11 +1477,20 @@ register_map_server <- function(input, output, session, con) {
           dom = "t",
           paging = FALSE,
           searching = FALSE,
-          ordering = FALSE,
+          ordering = TRUE,
+          order = list(),
           scrollX = TRUE,
-          autoWidth = TRUE
+          autoWidth = TRUE,
+          columnDefs = list(
+            list(
+              targets = "_all",
+              defaultContent = ""
+            )
+          )
         )
       )
+
+      format_result_table(table, data)
     },
     server = FALSE
   )
