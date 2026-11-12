@@ -147,73 +147,6 @@ get_point_sources <- function(con, coordinate_id, source_ids = NULL) {
   data
 }
 
-# Legacy diagnostics retained for existing scripts.
-get_source_preview <- function(con, source_id, limit = 100L) {
-  ids <- validate_map_source_ids(source_id)
-  if (is.null(ids) || length(ids) != 1L) {
-    stop("Expected one source identifier.", call. = FALSE)
-  }
-  if (
-    length(limit) != 1L ||
-      !is.numeric(limit) ||
-      is.na(limit) ||
-      !is.finite(limit) ||
-      limit < 1 ||
-      limit > 1000 ||
-      limit != floor(limit)
-  ) {
-    stop("Invalid preview limit.", call. = FALSE)
-  }
-  DBI::dbGetQuery(
-    con,
-    "
-    SELECT a.id AS abundance_id, a.sample_id, a.taxon_record_id, src.source, src.subsource,
-      dt.year, dt.month, dt.day, dt.date_precision, dt.day_is_imputed,
-      c.latitude, c.longitude, c.coord_precision, d.depth, d.depth_label,
-      tr.taxon_raw, tr.taxon_accepted, tx.rank AS taxonomic_rank,
-      a.abundance AS abundance_cells_per_litre, sp.enumeration_method, sp.sampling_method
-    FROM abundance AS a LEFT JOIN sample AS s ON s.id = a.sample_id
-    LEFT JOIN event AS e ON e.id = s.event_id LEFT JOIN source AS src ON src.id = e.source_id
-    LEFT JOIN event_datetime AS dt ON dt.id = e.event_datetime_id
-    LEFT JOIN coordinates AS c ON c.id = e.coordinates_id LEFT JOIN depth AS d ON d.id = s.depth_id
-    LEFT JOIN taxon_record AS tr ON tr.id = a.taxon_record_id
-    LEFT JOIN taxonomy AS tx ON tx.id = tr.taxonomy_id
-    LEFT JOIN sampling_protocol AS sp ON sp.id = a.sampling_protocol_id
-    WHERE e.source_id = ? LIMIT ?",
-    params = list(ids[[1]], as.integer(limit))
-  )
-}
-
-get_source_map_events <- function(con, source_id, limit = 2000L) {
-  ids <- validate_map_source_ids(source_id)
-  if (is.null(ids) || length(ids) != 1L) {
-    stop("Expected one source identifier.", call. = FALSE)
-  }
-  if (
-    length(limit) != 1L ||
-      !is.numeric(limit) ||
-      is.na(limit) ||
-      !is.finite(limit) ||
-      limit < 1 ||
-      limit > 2000 ||
-      limit != floor(limit)
-  ) {
-    stop("Invalid event limit.", call. = FALSE)
-  }
-  DBI::dbGetQuery(
-    con,
-    paste0(
-      "
-    SELECT e.id AS event_id, e.coordinates_id, c.latitude, c.longitude, c.coord_precision
-    FROM event AS e LEFT JOIN coordinates AS c ON c.id = e.coordinates_id
-    WHERE e.source_id = ? AND ",
-      map_event_exists_sql(),
-      " ORDER BY e.id LIMIT ?"
-    ),
-    params = list(ids[[1]], as.integer(limit) + 1L)
-  )
-}
-
 # Paged point details. The same applied provenance filter is used throughout.
 get_point_events <- function(
   con,
@@ -1677,5 +1610,261 @@ cv_page_statement <- function(plan, after_id = NULL, limit = 101L) {
       ' ORDER BY cv_rows.".base_id" LIMIT ?'
     ),
     params = c(params, list(as.integer(limit)))
+  )
+}
+
+# Build compact, database-wide summaries for the Home page.
+get_home_plot_summary <- function(con) {
+  bounded_query <- function(sql, maximum) {
+    data <- DBI::dbGetQuery(
+      con,
+      paste0(sql, "\nLIMIT ?"),
+      params = list(as.integer(maximum) + 1L)
+    )
+
+    if (nrow(data) > maximum) {
+      stop("Home summary safety bound exceeded.", call. = FALSE)
+    }
+
+    data
+  }
+
+  event_exists <- map_event_exists_sql()
+
+  years <- bounded_query(
+    paste0(
+      "
+      SELECT
+        CASE
+          WHEN typeof(dt.year) IN ('integer', 'real')
+            AND dt.year = CAST(dt.year AS INTEGER)
+            AND dt.year BETWEEN 1 AND 9999
+          THEN CAST(dt.year AS INTEGER)
+          ELSE NULL
+        END AS year,
+        COUNT(*) AS n
+      FROM event AS e
+      LEFT JOIN event_datetime AS dt ON dt.id = e.event_datetime_id
+      WHERE ",
+      event_exists,
+      "
+      GROUP BY 1
+      ORDER BY 1
+      "
+    ),
+    maximum = 10000L
+  )
+
+  sources <- bounded_query(
+    paste0(
+      "
+      SELECT src.source AS source, COUNT(*) AS n
+      FROM event AS e
+      LEFT JOIN source AS src ON src.id = e.source_id
+      WHERE ",
+      event_exists,
+      "
+      GROUP BY src.source
+      ORDER BY n DESC, src.source
+      "
+    ),
+    maximum = 5000L
+  )
+
+  ranks <- bounded_query(
+    "
+    SELECT
+      CASE
+        WHEN tx.aphiaid = -1 THEN 'Unresolved AphiaID'
+        WHEN tx.id IS NULL THEN 'No linked classification'
+        WHEN tx.rank IS NULL THEN 'Rank: SQL NULL'
+        WHEN tx.rank = '' THEN 'Rank: empty string'
+        ELSE tx.rank
+      END AS label,
+      SUM(ac.n) AS n
+    FROM (
+      SELECT taxon_record_id, COUNT(*) AS n
+      FROM abundance
+      GROUP BY taxon_record_id
+    ) AS ac
+    LEFT JOIN taxon_record AS tr ON tr.id = ac.taxon_record_id
+    LEFT JOIN taxonomy AS tx ON tx.id = tr.taxonomy_id
+    GROUP BY 1
+    ORDER BY n DESC, label
+    ",
+    maximum = 1000L
+  )
+  event_total <- DBI::dbGetQuery(
+    con,
+    paste0(
+      "SELECT COUNT(*) AS total FROM event AS e WHERE ",
+      event_exists
+    )
+  )$total[[1L]]
+
+  abundance_total <- DBI::dbGetQuery(
+    con,
+    "SELECT COUNT(*) AS total FROM abundance"
+  )$total[[1L]]
+
+  depth <- get_home_depth_summary(con)
+
+  if (
+    sum(years$n) != event_total ||
+      sum(sources$n) != event_total ||
+      sum(ranks$n) != abundance_total
+  ) {
+    stop(
+      "Home summary totals are inconsistent.",
+      call. = FALSE
+    )
+  }
+
+  list(
+    years = years,
+    sources = sources,
+    ranks = ranks,
+    depth = depth
+  )
+}
+
+# Summarise represented event-depth combinations without loading raw records.
+get_home_depth_summary <- function(con) {
+  data <- DBI::dbGetQuery(
+    con,
+    "
+    SELECT
+      d.depth,
+      typeof(d.depth) AS storage_type,
+      d.depth_label,
+      COUNT(*) AS n_samples
+    FROM sample AS sm
+    LEFT JOIN depth AS d ON d.id = sm.depth_id
+    WHERE EXISTS (
+      SELECT 1 FROM abundance AS a WHERE a.sample_id = sm.id
+    )
+    GROUP BY d.depth, typeof(d.depth), d.depth_label
+    ORDER BY d.depth_label, d.depth
+    LIMIT ?
+    ",
+    params = list(10001L)
+  )
+
+  if (nrow(data) > 10000L) {
+    stop(
+      "Home depth summary safety bound exceeded.",
+      call. = FALSE
+    )
+  }
+
+  qualifiers <- c(
+    "exact",
+    "range",
+    "surface",
+    "wc",
+    "pumphouse"
+  )
+
+  intervals <- c(
+    "0 m",
+    ">0-10 m",
+    ">10-25 m",
+    ">25-50 m",
+    ">50-100 m",
+    ">100-200 m",
+    ">200-500 m",
+    ">500 m"
+  )
+
+  if (
+    anyNA(data$depth) ||
+      anyNA(data$depth_label) ||
+      any(!data$storage_type %in% c("integer", "real")) ||
+      any(!data$depth_label %in% qualifiers)
+  ) {
+    stop(
+      paste(
+        "Unexpected depth values or qualifiers.",
+        "Review the depth dictionary before rebuilding the Home summary."
+      ),
+      call. = FALSE
+    )
+  }
+
+  numeric_depth <- as.numeric(data$depth)
+
+  if (
+    any(!is.finite(numeric_depth)) ||
+      any(numeric_depth < 0) ||
+      anyNA(data$n_samples) ||
+      any(data$n_samples <= 0)
+  ) {
+    stop(
+      "Invalid values in the Home depth summary.",
+      call. = FALSE
+    )
+  }
+
+  depth_interval <- cut(
+    numeric_depth,
+    breaks = c(-Inf, 0, 10, 25, 50, 100, 200, 500, Inf),
+    labels = intervals,
+    right = TRUE
+  )
+
+  counts <- as.matrix(
+    table(
+      factor(character(0), levels = qualifiers),
+      factor(character(0), levels = intervals)
+    )
+  )
+
+  storage.mode(counts) <- "double"
+  dimnames(counts) <- list(
+    qualifier = qualifiers,
+    interval = intervals
+  )
+
+  if (nrow(data)) {
+    grouped <- stats::xtabs(
+      n_samples ~ qualifier + interval,
+      data = data.frame(
+        n_samples = data$n_samples,
+        qualifier = factor(
+          data$depth_label,
+          levels = qualifiers
+        ),
+        interval = factor(
+          depth_interval,
+          levels = intervals
+        )
+      ),
+      drop.unused.levels = FALSE
+    )
+
+    counts[,] <- as.matrix(grouped)
+  }
+
+  total <- DBI::dbGetQuery(
+    con,
+    "
+    SELECT COUNT(*) AS total
+    FROM sample AS sm
+    WHERE EXISTS (
+      SELECT 1 FROM abundance AS a WHERE a.sample_id = sm.id
+    )
+    "
+  )$total[[1L]]
+
+  if (sum(counts) != total) {
+    stop(
+      "Home depth summary totals are inconsistent.",
+      call. = FALSE
+    )
+  }
+
+  list(
+    counts = counts,
+    total = as.numeric(total)
   )
 }
