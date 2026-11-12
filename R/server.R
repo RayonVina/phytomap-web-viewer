@@ -12,4 +12,5 @@ server <- function(input, output, session) {
   register_home_server(input, output, session, con)
   register_catalog_server(input, output, session, con)
   register_map_server(input, output, session, con)
+  register_sources_server(input, output, session, con)
 }

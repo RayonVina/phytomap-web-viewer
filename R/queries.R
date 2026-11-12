@@ -1868,3 +1868,50 @@ get_home_depth_summary <- function(con) {
     total = as.numeric(total)
   )
 }
+
+# Source explorer: lightweight list; the metadata column is never loaded here.
+get_source_list <- function(con) {
+  data <- DBI::dbGetQuery(
+    con,
+    "
+    SELECT s.id AS source_id, s.source, s.subsource, s.url,
+      COUNT(e.id) AS n_events
+    FROM source AS s
+    LEFT JOIN event AS e ON e.source_id = s.id
+    GROUP BY s.id, s.source, s.subsource, s.url
+    ORDER BY s.source, s.subsource, s.id
+    LIMIT 5001
+  "
+  )
+  if (nrow(data) > 5000L) {
+    stop("Source list safety bound exceeded.", call. = FALSE)
+  }
+  data
+}
+
+# One source entry, including its JSON metadata (bounded by max_chars).
+get_source_metadata <- function(con, source_id, max_chars = 200000L) {
+  if (
+    length(source_id) != 1L ||
+      !is.numeric(source_id) ||
+      is.na(source_id) ||
+      !is.finite(source_id) ||
+      source_id != floor(source_id)
+  ) {
+    stop("Invalid source identifier.", call. = FALSE)
+  }
+  DBI::dbGetQuery(
+    con,
+    "
+    SELECT s.id AS source_id, s.source, s.subsource, s.url, s.notes,
+      s.created, s.modified,
+      length(s.metadata) AS metadata_chars,
+      CASE WHEN length(s.metadata) <= ? THEN s.metadata END AS metadata,
+      (SELECT COUNT(*) FROM event AS e WHERE e.source_id = s.id) AS n_events
+    FROM source AS s
+    WHERE s.id = ?
+    LIMIT 1
+  ",
+    params = list(as.integer(max_chars), as.integer(source_id))
+  )
+}

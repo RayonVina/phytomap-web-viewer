@@ -419,3 +419,22 @@ body {
     width: 60px;
   }
 }
+.source-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 16px;
+  margin-top: 12px;
+}
+@media (max-width: 900px) {
+  .source-layout { grid-template-columns: minmax(0, 1fr); }
+}
+.source-detail-panel { overflow-wrap: anywhere; }
+.source-json-tree { max-height: 620px; overflow-y: auto; padding-right: 8px; }
+.source-section { margin-bottom: 8px; }
+.source-section > summary { font-weight: 600; cursor: pointer; }
+.json-dl { margin: 6px 0 6px 8px; }
+.json-dl dt { font-weight: 600; color: #34495e; margin-top: 6px; }
+.json-dl dd { margin-left: 12px; }
+.json-list { margin: 4px 0; padding-left: 20px; }
+.json-null { color: #7a8a97; font-style: italic; }
+#src_raw { max-height: 620px; overflow: auto; white-space: pre-wrap; }

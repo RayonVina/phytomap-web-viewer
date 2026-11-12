@@ -4,7 +4,8 @@ required_packages <- c(
   "leaflet",
   "htmltools",
   "DiagrammeR",
-  "DT"
+  "DT",
+  "jsonlite"
 )
 
 missing_packages <- required_packages[
@@ -32,6 +33,7 @@ source(file.path("R", "table_display.R"), local = TRUE)
 source(file.path("R", "server_home.R"), local = TRUE)
 source(file.path("R", "server_catalog.R"), local = TRUE)
 source(file.path("R", "server_map.R"), local = TRUE)
+source(file.path("R", "server_sources.R"), local = TRUE)
 
 source(file.path("R", "server.R"), local = TRUE)
 
@@ -245,9 +247,9 @@ ui <- fluidPage(
     tags$link(
       rel = "stylesheet",
       type = "text/css",
-      href = "styles.css?v=3"
+      href = "styles.css?v=4"
     ),
-    tags$script(src = "catalog_interactions.js?v=3"),
+    tags$script(src = "catalog_interactions.js?v=4"),
     tags$script(src = "catalog_filters.js?v=1")
   ),
 
@@ -849,27 +851,83 @@ ui <- fluidPage(
             )
           )
         ),
-
-        # Metadata dictionary placeholder.
+        # Source explorer.
         tabPanel(
-          "Metadata dictionary",
+          "Sources",
           value = "dictionary",
 
           div(
             class = "content-panel",
 
-            h2("Metadata dictionary"),
+            h2("Source explorer"),
 
             p(
               paste(
-                "Variable definitions, units, expected values",
-                "and missing information."
+                "Browse the source/subsource entries and the JSON metadata",
+                "stored for each one."
               )
             ),
 
+            textOutput("src_status"),
+
             div(
-              class = "development-note",
-              "This section is not implemented yet."
+              class = "source-layout",
+
+              div(
+                class = "source-list-panel",
+                DT::DTOutput("src_table")
+              ),
+
+              div(
+                class = "source-detail-panel",
+
+                uiOutput("src_header"),
+
+                tabsetPanel(
+                  id = "src_detail_tabs",
+                  type = "tabs",
+                  tabPanel("Summary", uiOutput("src_summary")),
+                  tabPanel(
+                    "Raw JSON",
+                    verbatimTextOutput("src_raw")
+                  )
+                )
+              )
+            ),
+
+            tags$details(
+              style = "margin-top:10px;font-size:12px;color:#526776;",
+              tags$summary("Interpretation notes"),
+              tags$ul(
+                tags$li(
+                  paste(
+                    "A URL does not uniquely identify a source/subsource",
+                    "entry; several subsources can share one collection URL."
+                  )
+                ),
+                tags$li(
+                  paste(
+                    "Metadata structure is similar across entries, but its",
+                    "content depends on the documentation available for each",
+                    "resource. Absent sections are not shown; JSON null is",
+                    "shown as 'null (not recorded)'."
+                  )
+                ),
+                tags$li(
+                  paste(
+                    "References in the metadata describe the original",
+                    "resource, not the Phyto-MAP data descriptor, and the",
+                    "metadata is not a record-by-record crosswalk to the",
+                    "original files."
+                  )
+                ),
+                tags$li(
+                  paste(
+                    "Check each entry's licence and rights statement before",
+                    "reusing the data."
+                  )
+                )
+              )
             )
           )
         )
